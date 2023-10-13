@@ -1,10 +1,15 @@
 #!/bin/bash
 
-PATH="/opt/cuda/bin:$PWD:$PATH"
+sudo pacman -S --needed make git ffmpeg cuda python-pipx
+pipx install translatesubs
 
-sudo pacman -S --needed make git ffmpeg cuda nodejs npm
+filename="$(basename "$1" | sed 's/\(.*\)\..*/\1/')"
+dir="$filename"
+wav_file="${filename}.wav"
 
-ffmpeg -i "$1" -ar 16000 -ac 1 -c:a pcm_s16le output.wav
+mkdir "$dir"
+
+ffmpeg -i "$1" -ar 16000 -ac 1 -c:a pcm_s16le "${dir}/${wav_file}"
 
 if [[ ! -f ./whisper.cpp/main ]]; then
     git clone https://github.com/ggerganov/whisper.cpp
@@ -12,7 +17,7 @@ if [[ ! -f ./whisper.cpp/main ]]; then
         cd whisper.cpp
         bash ./models/download-ggml-model.sh large
 
-        if ! which nvcc; then
+        if [[ ! -f /opt/cuda/bin/nvcc ]]; then
             make
         else
             WHISPER_CUBLAS=1 make -j
@@ -22,19 +27,11 @@ fi
 
 (
     cd whisper.cpp
-    ./main -m models/ggml-large.bin -l auto -osrt true -f ../output.wav
+    ./main -m models/ggml-large.bin -l auto -osrt true -f ../"${dir}/${wav_file}"
 )
 
-if [[ ! -f ./translator/cli/translator.mjs ]]; then
-    git clone https://github.com/Cerlancism/chatgpt-subtitle-translator translator
-    (
-        cd translator
-        npm install
-        chmod +x cli/translator.mjs
-    )
-fi
-
+# mv "${wav_file}.srt" "$dir"
 (
-    cd translator
-    cli/translator.mjs --stream --temperature 0 --file ../output.wav.srt --from en -to tr
+    cd "$dir"
+    translatesubs "${wav_file}.srt" "${filename}_tr.srt" --to_lang tr --separator " |||  "
 )

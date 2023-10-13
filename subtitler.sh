@@ -30,8 +30,8 @@ fi
     ./main -m models/ggml-large.bin -l auto -osrt true -f ../"${dir}/${wav_file}"
 )
 
-# mv "${wav_file}.srt" "$dir"
 (
     cd "$dir"
     translatesubs "${wav_file}.srt" "${filename}_tr.srt" --to_lang tr --separator " |||  "
+    ffmpeg -i ../"$1" -vf subtitles="${filename}_tr.srt" "${filename}_tr_subs".mp4
 )

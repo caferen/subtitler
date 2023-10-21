@@ -46,7 +46,12 @@ echo "Extracting subtitles from the media file. This will take a while if the me
 "$whisper" -m  "$model" -l auto -osrt true -f "${output_dir}/${wav_file}" &> /dev/null
 
 echo "Translating subtitles. This will take a while if the media file is large."
-translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang" --separator " |||  " &> /dev/null
+translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang" &> /dev/null
+
+# try another separator if the defaults fail
+if [[ ! -f "${output_dir}/${filename}_${lang}.srt" ]]; then
+    translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang" --separator " |||  " &> /dev/null
+fi
 
 if ffmpeg -version | grep -F -- --enable-libass &> /dev/null; then
     echo "Embedding subtitles back into the original media..."

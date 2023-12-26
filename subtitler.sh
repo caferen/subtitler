@@ -6,8 +6,8 @@ then
     exit 0
 fi
 
-sudo pacman -S --needed make git ffmpeg cuda python-pipx &> /dev/null
-pipx install translatesubs &> /dev/null
+sudo pacman -S --needed make git ffmpeg cuda python-pipx
+pipx install translatesubs
 
 filepath=$(readlink -f "$1")
 filename="$(basename "$1" | sed 's/\(.*\)\..*/\1/')"
@@ -22,45 +22,41 @@ model="${whisper_dir}/models/ggml-large.bin"
 mkdir -p "$subtitler_dir"
 mkdir -p "$output_dir"
 
-echo "Converting the input file to a usable format..."
-ffmpeg -i "$filepath" -ar 16000 -ac 1 -c:a pcm_s16le "${output_dir}/${wav_file}" -y &> /dev/null
+ffmpeg -i "$filepath" -ar 16000 -ac 1 -c:a pcm_s16le "${output_dir}/${wav_file}" -y
 
 if [[ ! -f "$whisper" ]]; then
-    echo "Downloading Whisper. This may take a while depending on the download speed..."
-    git clone https://github.com/ggerganov/whisper.cpp "$whisper_dir" &> /dev/null
+    git clone https://github.com/ggerganov/whisper.cpp "$whisper_dir"
 fi
 
-echo "Setting up Whisper. This may take a while..."
 (
     cd "$whisper_dir"
-    bash ./models/download-ggml-model.sh large &> /dev/null
+    bash ./models/download-ggml-model.sh large
 
     if [[ ! -f /opt/cuda/bin/nvcc ]]; then
-        make &> /dev/null
+        make
     else
-        WHISPER_CUBLAS=1 make -j &> /dev/null
+        WHISPER_CUBLAS=1 make -j
     fi
 )
 
-echo "Extracting subtitles from the media file. This will take a while if the media file is large."
-"$whisper" -m  "$model" -l auto -osrt true -f "${output_dir}/${wav_file}" &> /dev/null
+"$whisper" -m  "$model" -l auto -osrt true -f "${output_dir}/${wav_file}"
 
 echo "Translating subtitles. This will take a while if the media file is large."
-translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang" &> /dev/null
+translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang"
 
 # try another separator if the defaults fail
 if [[ ! -f "${output_dir}/${filename}_${lang}.srt" ]]; then
-    translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang" --separator " |||  " &> /dev/null
+    translatesubs "${output_dir}/${wav_file}.srt" "${output_dir}/${filename}_${lang}.srt" --to_lang "$lang" --separator " |||  "
 fi
 
 if ffmpeg -version | grep -F -- --enable-libass &> /dev/null; then
     echo "Embedding subtitles back into the original media..."
 
-    ffmpeg -i "$filepath" -vf subtitles="${output_dir}/${filename}_${lang}.srt" "${output_dir}/${filename}_${lang}_hardsubs".mp4 -y &> /dev/null
+    ffmpeg -i "$filepath" -vf subtitles="${output_dir}/${filename}_${lang}.srt" "${output_dir}/${filename}_${lang}_hardsubs".mp4 -y
     ffmpeg -i "$filepath" -i "${output_dir}/${filename}_${lang}.srt" \
         -i "${output_dir}/${wav_file}.srt" -map 0 -map 1 -map 2 -c copy -c:s mov_text \
         -metadata:s:s:0 language="$lang" -metadata:s:s:0 language=original \
-        "${output_dir}/${filename}_${lang}_softsubs".mp4 -y &> /dev/null
+        "${output_dir}/${filename}_${lang}_softsubs".mp4 -y
 else
     echo "libass is not enabled for FFMPEG. Cannot embed subtitles."
 fi
